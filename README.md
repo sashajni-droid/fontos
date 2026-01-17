@@ -1,3 +1,4 @@
+```python
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.signal import savgol_filter
@@ -97,3 +98,4 @@ print("4) inflexiós idő(k):", np.array2string(infl_t, precision=4))
 print(f"5) max meredekség = {max_slope:.6g} @ t={t_slope:.6g}")
 print(f"6) t67 ≈ {t67:.6g}")
 print("8) Weibull paraméterek:", [float(x) for x in popt])
+```
