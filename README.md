@@ -185,3 +185,88 @@ print(f"\nMaximális amplitúdó: {max_v} mV (időpont: {max_t} ms)")
 
 vége
 ```
+
+```
+from pathlib import Path
+import matplotlib.pyplot as plt
+
+# --------- FÁJL: ASZTAL ----------
+csv_path = Path.home() / "Desktop" / "adat.csv"
+
+# --------- SORONKÉNTI BEOLVASÁS + CSERÉK ----------
+x = []
+y = []
+
+with open(csv_path, "r", encoding="utf-8") as f:
+    for line in f:
+        line = line.strip()
+        if not line:
+            continue
+
+        # 1) vessző -> pont (tizedesvessző miatt)
+        line = line.replace(",", ".")
+        # 2) pontosvessző -> vessző (elválasztó miatt)
+        line = line.replace(";", ",")
+
+        parts = line.split(",")
+
+        # minimum 2 mező kell (X és Y)
+        if len(parts) < 2:
+            continue
+
+        try:
+            xv = float(parts[0])
+            yv = float(parts[1])
+        except ValueError:
+            # fejléc vagy hibás sor
+            continue
+
+        x.append(xv)
+        y.append(yv)
+
+# --------- ÁTLAGOLÓ SZŰRŐ (mozgóátlag) ----------
+def mean_filter(data, window_size=5):
+    n = len(data)
+    k = window_size // 2
+    out = []
+
+    for i in range(n):
+        start = max(0, i - k)
+        end = min(n, i + k + 1)
+        out.append(sum(data[start:end]) / (end - start))
+
+    return out
+
+# --------- MEDIÁN SZŰRŐ ----------
+def median_filter(data, window_size=5):
+    n = len(data)
+    k = window_size // 2
+    out = []
+
+    for i in range(n):
+        start = max(0, i - k)
+        end = min(n, i + k + 1)
+        window = sorted(data[start:end])
+        m = len(window)
+        out.append(window[m // 2])  # középső elem (páratlan ablaknál korrekt)
+
+    return out
+
+# Szűrt jelek
+y_mean = mean_filter(y, window_size=5)
+y_median = median_filter(y, window_size=5)
+
+# --------- ÁBRÁZOLÁS (egy grafikonon) ----------
+plt.figure()
+plt.plot(x, y, label="Eredeti")
+plt.plot(x, y_mean, label="Átlag szűrt")
+plt.plot(x, y_median, label="Medián szűrt")
+plt.xlabel("X")
+plt.ylabel("Y")
+plt.title("Zajos és szűrt adatok")
+plt.legend()
+plt.grid(True)
+plt.show()
+vége
+```
+
