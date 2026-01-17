@@ -99,3 +99,79 @@ print(f"5) max meredekség = {max_slope:.6g} @ t={t_slope:.6g}")
 print(f"6) t67 ≈ {t67:.6g}")
 print("8) Weibull paraméterek:", [float(x) for x in popt])
 ```
+
+
+```harom: Potencial görbe
+from pathlib import Path
+import matplotlib.pyplot as plt
+
+# --------- FÁJL ELÉRÉSI ÚT (GITHUB-BARÁT) ----------
+csv_path = Path(__file__).parent / "data2.csv"
+
+# --------- SORONKÉNTI BEOLVASÁS, CSERÉKKEL ----------
+time_ms = []
+ap1 = []
+
+with open(csv_path, "r", encoding="utf-8") as file:
+    for line in file:
+        line = line.strip()
+        if not line:
+            continue
+
+        # elválasztó felismerése + tizedesvessző csere
+        if ";" in line:
+            parts = line.split(";")
+            parts = [p.replace(",", ".") for p in parts]
+        else:
+            parts = line.split(",")
+
+        try:
+            t = float(parts[0])   # Time [ms]
+            v = float(parts[1])   # 1-es oszlop [mV]
+        except:
+            continue  # fejléc vagy hibás sor
+
+        time_ms.append(t)
+        ap1.append(v)
+
+# --------- 1) ÁBRÁZOLÁS ----------
+plt.figure()
+plt.plot(time_ms, ap1, label="1-es akciós potenciál")
+plt.xlabel("Idő [ms]")
+plt.ylabel("Feszültség [mV]")
+plt.title("Akciós potenciál időfüggése (1-es oszlop)")
+plt.legend()
+plt.grid(True)
+plt.show()
+
+# --------- 2) POZITÍV TARTOMÁNY ----------
+print("Pozitív feszültségtartomány időintervallum(ai):")
+
+in_positive = False
+start = None
+
+for i in range(len(ap1)):
+    if ap1[i] > 0 and not in_positive:
+        in_positive = True
+        start = time_ms[i]
+    elif ap1[i] <= 0 and in_positive:
+        end = time_ms[i-1]
+        print(f"   {start} ms  -->  {end} ms")
+        in_positive = False
+
+if in_positive:
+    print(f"   {start} ms  -->  {time_ms[-1]} ms")
+
+# --------- 3) MAXIMÁLIS AMPLITÚDÓ ----------
+max_val = ap1[0]
+max_time = time_ms[0]
+
+for i in range(1, len(ap1)):
+    if ap1[i] > max_val:
+        max_val = ap1[i]
+        max_time = time_ms[i]
+
+print("\nMaximális amplitúdó:")
+print(f"   {max_val} mV, időpont: {max_time} ms")
+vége
+```
