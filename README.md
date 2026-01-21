@@ -1,272 +1,235 @@
-```python
-import numpy as np
+```python kioldódás
+import pandas as pd
 import matplotlib.pyplot as plt
-from scipy.signal import savgol_filter
-from scipy.optimize import curve_fit
-from pathlib import Path
+import numpy as np
 
-# --- Weibull modell ---
-def weibull(t, A, alpha, beta, t0):
-    z = np.maximum(t - t0, 0) / alpha
-    return A * (1 - np.exp(-(z ** beta)))
+# 1. Adatok beolvasása
+tabla = pd.read_csv("data2.csv")  # Ne felejtsd el pontos helyre menteni a fájlt!
 
-# --- 1) Beolvasás soronként (Asztalról, ; és tizedesvessző) ---
-csv_path = Path.home() / "Desktop" / "data2.csv"
+# 2. Idő és értékek kinyerése tömbbe
+t = tabla.iloc[:, 0].to_numpy()
+y = tabla.iloc[:, 1].to_numpy()
 
-t_list = []
-y_list = []
-
-with open(csv_path, "r", encoding="utf-8") as f:
-    fejléc = f.readline()  # első sor átugrása
-
-    for sor in f:
-        sor = sor.strip()
-        if sor == "":
-            continue
-
-        darabok = sor.split(";")
-
-        t = float(darabok[0].replace(",", "."))
-        y = float(darabok[1].replace(",", "."))
-
-        t_list.append(t)
-        y_list.append(y)
-
-t = np.array(t_list)
-y = np.array(y_list)
-
-# --- 2) pontok ábrázolása ---
-plt.figure()
-plt.plot(t, y, "o", label="Mért adatok")
-plt.xlabel("t")
-plt.ylabel("Kioldódás")
-plt.title("Kioldódási adatok")
+# 3. Ábra kirajzolása
+plt.figure(figsize=(10, 5))
+plt.scatter(t, y, label="Mért adatok", color="blue")
+plt.xlabel("Idő (s)")
+plt.ylabel("Kioldódott hatóanyag (%)")
+plt.title("Diffúziós kioldódás")
 plt.legend()
 plt.grid(True)
+plt.tight_layout()
 plt.show()
 
-# --- 3) mintavételi frekvencia ---
-fs = 1 / np.median(np.diff(t))
+# 4. Mintavételi időköz és frekvencia
+mintaveteli_idokoz = t[1] - t[0]
+mintaveteli_frekvencia = 1 / mintaveteli_idokoz
 
-# --- 4) min / max ---
-i_min, i_max = np.argmin(y), np.argmax(y)
-ymin, tmin = y[i_min], t[i_min]
-ymax, tmax = y[i_max], t[i_max]
+print("Mintavételi időköz (s):", round(mintaveteli_idokoz, 4))
+print("Mintavételi frekvencia (Hz):", round(mintaveteli_frekvencia, 2))
 
-# --- 5) inflexiós pont(ok) ---
-win = min(21, len(y) - (len(y) + 1) % 2)
-win = max(win, 7)
-ys = savgol_filter(y, win, 3)
-d2 = np.gradient(np.gradient(ys, t), t)
-infl_idx = np.where(np.diff(np.sign(d2)) != 0)[0]
-infl_t = t[infl_idx + 1]
+# 5. Minimum és maximum
+y_min = np.min(y)
+y_max = np.max(y)
+print("Minimum érték:", round(y_min, 2))
+print("Maximum érték:", round(y_max, 2))
 
-# --- 6) max meredekség ---
-dy = np.gradient(ys, t)
-i_s = np.argmax(dy)
-max_slope, t_slope = dy[i_s], t[i_s]
+# 6. Deriváltak (sebességek és inflexiós pontok)
+d1 = np.diff(y) / np.diff(t)     # Első derivált = sebesség
+d2 = np.diff(d1)                 # Második derivált = "görbület"
 
-# --- 7) t67 ---
-target = 0.67 * ymax
-k = np.where(y >= target)[0][0]
-t67 = t[k - 1] + (target - y[k - 1]) * (t[k] - t[k - 1]) / (y[k] - y[k - 1])
+# 7. Inflexiós pontok keresése
+inflexios_idok = []
+for i in range(len(d2) - 1):
+    if np.sign(d2[i]) != np.sign(d2[i+1]):  # Előjelváltás
+        inflexios_idok.append(t[i+1])
 
-# --- 8) illesztés ---
-p0 = [ymax, (t[-1] - t[0]) / 3, 1.0, t[0]]
-bounds = (
-    [0, 1e-12, 1e-6, t[0] - (t[-1] - t[0])],
-    [1.5 * ymax, 10 * (t[-1] - t[0]) + 1e-9, 10, t[-1]],
-)
-popt, _ = curve_fit(weibull, t, y, p0=p0, bounds=bounds, maxfev=20000)
+print("Inflexiós pontok időben (s):", [round(i, 2) for i in inflexios_idok])
 
-# --- 9) adat + illesztés ábra ---
-tt = np.linspace(t.min(), t.max(), 400)
-plt.figure()
-plt.plot(t, y, "o", label="Mért adatok")
-plt.plot(tt, weibull(tt, *popt), "-", label="Weibull illesztés")
-plt.xlabel("t")
-plt.ylabel("Kioldódás")
-plt.title("Adatok + illesztés")
-plt.legend()
-plt.grid(True)
-plt.show()
+# 8. Maximális kioldódási sebesség
+sebessegek = np.abs(d1)
+max_sebesseg = np.max(sebessegek)
+max_seb_index = np.argmax(sebessegek)
+max_seb_ido = t[max_seb_index]
 
-# --- 10) kiírás ---
-print(f"2) fs = {fs:.6g} 1/(t-egység)")
-print(f"3) min = {ymin:.6g} @ t={tmin:.6g} | max = {ymax:.6g} @ t={tmax:.6g}")
-print("4) inflexiós idő(k):", np.array2string(infl_t, precision=4))
-print(f"5) max meredekség = {max_slope:.6g} @ t={t_slope:.6g}")
-print(f"6) t67 ≈ {t67:.6g}")
-print("8) Weibull paraméterek:", [float(x) for x in popt])
+print("Maximális sebesség:", round(max_sebesseg, 4))
+print("Ez kb. ekkor történt (s):", round(max_seb_ido, 2))
+
+# 9. 67%-os szint elérésének ideje
+cel_ertek = 0.67 * y_max
+ido_67 = None
+
+for i in range(len(y)):
+    if y[i] >= cel_ertek:
+        ido_67 = t[i]
+        break
+
+print("67%-os szint elérésének ideje (s):", round(ido_67, 2) if ido_67 else "Nem érte el")
+
 ```
 
 
 ```harom: Potencial görbe
-from pathlib import Path
+import pandas as pd
 import matplotlib.pyplot as plt
 
-# --------- FÁJL: ASZTAL ----------
-csv_path = Path.home() / "Desktop" / "ap.csv"
+# CSV fájl beolvasása
+tabla = pd.read_csv("adat(1).csv")
 
-time_ms = []
-ap1 = []
+# Idő és feszültség oszlop kiválasztása
+ido = tabla["X"]  # idő ms-ban
+jel = tabla["Y"]  # feszültség mV-ban
 
-with open(csv_path, "r", encoding="utf-8") as f:
-    for line in f:
-        line = line.strip()
-        if not line:
-            continue
-
-        # 1) vessző -> pont (tizedesvessző kezelése)
-        line = line.replace(",", ".")
-        # 2) pontosvessző -> vessző (elválasztó egységesítése)
-        line = line.replace(";", ",")
-
-        parts = line.split(",")
-
-        # minimum: Time + 1 oszlop
-        if len(parts) < 2:
-            continue
-
-        try:
-            t = float(parts[0])
-            v = float(parts[1])
-        except ValueError:
-            # fejléc vagy hibás sor
-            continue
-
-        time_ms.append(t)
-        ap1.append(v)
-
-# --------- 1) ÁBRÁZOLÁS ----------
-plt.figure()
-plt.plot(time_ms, ap1, label="1-es oszlop (AP1)")
-plt.xlabel("Idő [ms]")
-plt.ylabel("Feszültség [mV]")
-plt.title("Akciós potenciál időfüggése (1-es oszlop)")
+# Ábra rajzolása
+plt.figure(figsize=(10, 5))
+plt.plot(ido, jel, color="orange", label="Akciós potenciál görbe")
+plt.xlabel("Idő (ms)")
+plt.ylabel("Feszültség (mV)")
+plt.title("Akciós potenciál")
 plt.legend()
 plt.grid(True)
+plt.tight_layout()
 plt.show()
 
-# --------- 2) POZITÍV TARTOMÁNY INTERVALLUMAI ----------
-intervals = []
-in_pos = False
-start = None
+# Maximális amplitúdó meghatározása
+max_amplitudo = jel.max()
+print("Maximális amplitúdó (mV):", max_amplitudo)
 
-for i in range(len(ap1)):
-    if ap1[i] > 0 and not in_pos:
-        in_pos = True
-        start = time_ms[i]
-    elif ap1[i] <= 0 and in_pos:
-        in_pos = False
-        end = time_ms[i - 1]
-        intervals.append((start, end))
+# Pozitív feszültségtartomány kezdete és vége
+pozitiv_indexek = jel[jel > 0].index
 
-if in_pos:
-    intervals.append((start, time_ms[-1]))
-
-if intervals:
-    print("Pozitív feszültségtartomány intervallum(ok):")
-    for s, e in intervals:
-        print(f"  Kezdő: {s} ms, Vég: {e} ms")
+if not pozitiv_indexek.empty:
+    kezdet = ido[pozitiv_indexek[0]]
+    veg = ido[pozitiv_indexek[-1]]
+    print("Pozitív tartomány kezdete (ms):", kezdet)
+    print("Pozitív tartomány vége (ms):", veg)
 else:
-    print("Nincs pozitív feszültségtartomány ( > 0 mV ).")
-
-# --------- 3) MAXIMÁLIS AMPLITÚDÓ ----------
-max_v = ap1[0]
-max_t = time_ms[0]
-
-for i in range(1, len(ap1)):
-    if ap1[i] > max_v:
-        max_v = ap1[i]
-        max_t = time_ms[i]
-
-print(f"\nMaximális amplitúdó: {max_v} mV (időpont: {max_t} ms)")
+    print("Nincs pozitív tartomány.")
 
 vége
 ```
 
-```
-from pathlib import Path
+```   ZAJ
+import pandas as pd
 import matplotlib.pyplot as plt
 
-# --------- FÁJL: ASZTAL ----------
-csv_path = Path.home() / "Desktop" / "adat.csv"
+# 1. CSV fájl beolvasása
+tabla = pd.read_csv("adat.csv")
 
-# --------- SORONKÉNTI BEOLVASÁS + CSERÉK ----------
-x = []
-y = []
+# 2. X és Y oszlop beolvasása
+x = tabla["X"]
+y = tabla["Y"]
 
-with open(csv_path, "r", encoding="utf-8") as f:
-    for line in f:
-        line = line.strip()
-        if not line:
-            continue
+# 3. Szűrési ablak mérete (csak páratlan szám legyen pl. 3, 5, 11 stb.)
+ablak_meret = 11
 
-        # 1) vessző -> pont (tizedesvessző miatt)
-        line = line.replace(",", ".")
-        # 2) pontosvessző -> vessző (elválasztó miatt)
-        line = line.replace(";", ",")
+# 4. Két új lista az átlagolt és medián szűrt adatoknak
+y_atlagolt = []
+y_median = []
 
-        parts = line.split(",")
+# 5. Végigmegyünk az adatokon, és minden pontra számítunk szűrt értéket
+for i in range(len(y)):
+    kezdo = i - ablak_meret // 2
+    vegso = i + ablak_meret // 2 + 1
 
-        # minimum 2 mező kell (X és Y)
-        if len(parts) < 2:
-            continue
+    # Ha az ablak kilógna, korrigáljuk
+    if kezdo < 0:
+        kezdo = 0
+    if vegso > len(y):
+        vegso = len(y)
 
-        try:
-            xv = float(parts[0])
-            yv = float(parts[1])
-        except ValueError:
-            # fejléc vagy hibás sor
-            continue
+    resz = y[kezdo:vegso]
 
-        x.append(xv)
-        y.append(yv)
+    # Átlagoló szűrő kiszámítása
+    atlag = sum(resz) / len(resz)
+    y_atlagolt.append(atlag)
 
-# --------- ÁTLAGOLÓ SZŰRŐ (mozgóátlag) ----------
-def mean_filter(data, window_size=5):
-    n = len(data)
-    k = window_size // 2
-    out = []
+    # Medián szűrő kiszámítása
+    rendezett = sorted(resz)
+    median = rendezett[len(rendezett) // 2]
+    y_median.append(median)
 
-    for i in range(n):
-        start = max(0, i - k)
-        end = min(n, i + k + 1)
-        out.append(sum(data[start:end]) / (end - start))
+# 6. Ábrázolás: eredeti és szűrt jelek egy grafikonon
+plt.figure(figsize=(10, 5))
+plt.plot(x, y, label="Eredeti jel", color="gray")
+plt.plot(x, y_atlagolt, label="Átlagoló szűrő", color="blue")
+plt.plot(x, y_median, label="Medián szűrő", color="red")
 
-    return out
-
-# --------- MEDIÁN SZŰRŐ ----------
-def median_filter(data, window_size=5):
-    n = len(data)
-    k = window_size // 2
-    out = []
-
-    for i in range(n):
-        start = max(0, i - k)
-        end = min(n, i + k + 1)
-        window = sorted(data[start:end])
-        m = len(window)
-        out.append(window[m // 2])  # középső elem (páratlan ablaknál korrekt)
-
-    return out
-
-# Szűrt jelek
-y_mean = mean_filter(y, window_size=5)
-y_median = median_filter(y, window_size=5)
-
-# --------- ÁBRÁZOLÁS (egy grafikonon) ----------
-plt.figure()
-plt.plot(x, y, label="Eredeti")
-plt.plot(x, y_mean, label="Átlag szűrt")
-plt.plot(x, y_median, label="Medián szűrt")
+# 7. Tengelyfeliratok, cím, jelmagyarázat
 plt.xlabel("X")
 plt.ylabel("Y")
-plt.title("Zajos és szűrt adatok")
+plt.title("Eredeti, átlagolt és medián szűrt jel")
 plt.legend()
 plt.grid(True)
+plt.tight_layout()
 plt.show()
+
 vége
+```
+
+```5
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+
+# 1. Adatok beolvasása CSV fájlból
+tabla = pd.read_csv("5adat.csv")  # Cseréld ki a fájl nevét, ha szükséges
+
+# 2. X és Y oszlopok kiválasztása és numpy tömbbé alakítása
+x = tabla["X"].to_numpy()
+y = tabla["Y"].to_numpy()
+
+# 3. R² érték kiszámítása - minél közelebb van 1-hez, annál jobb az illeszkedés
+def r2_ertek(y_valodi, y_becsult):
+    modell_hiba = np.sum((y_valodi - y_becsult) ** 2)
+    teljes_szoras = np.sum((y_valodi - np.mean(y_valodi)) ** 2)
+    return 1 - modell_hiba / teljes_szoras
+
+# 4. Több modell (polinom) illesztése, 1., 2. és 3. fokú
+modellek = []
+
+for fok in [1, 2, 3]:
+    egyutthatok = np.polyfit(x, y, fok)              # polinom együtthatók
+    polinom = np.poly1d(egyutthatok)                 # polinom objektum
+    y_becsult = polinom(x)                           # becsült Y értékek
+    r2 = r2_ertek(y, y_becsult)                      # R² érték számítása
+
+    modellek.append((f"{fok}.fokú polinom", fok, egyutthatok, y_becsult, r2))
+
+# 5. Legjobb modell kiválasztása R² alapján
+modellek.sort(key=lambda elem: elem[4], reverse=True)
+legjobb_nev, legjobb_fok, legjobb_param, legjobb_y, legjobb_r2 = modellek[0]
+
+# 6. Minden modell R² értékének kiíratása
+print("Modellek R² értékei:")
+for nev, fok, param, yhat, r2 in modellek:
+    print(f"{nev}: R² = {r2:.6f}")
+
+# 7. Legjobb modell adatai
+print("\nLegjobb illeszkedés:")
+print("Modell:", legjobb_nev)
+print("Együtthatók:", legjobb_param)
+print(f"R² = {legjobb_r2:.6f}")
+
+# 8. Eredeti és illesztett adatok ábrázolása
+plt.figure(figsize=(10, 5))
+plt.plot(x, y, label="Eredeti adatok", color="gray")
+
+# A görbe szépen fusson: X-eket rendezzük növekvőbe
+rendezes = np.argsort(x)
+x_rendezett = x[rendezes]
+y_rendezett = legjobb_y[rendezes]
+
+plt.plot(x_rendezett, y_rendezett,
+         label=f"Illesztés: {legjobb_nev} (R² = {legjobb_r2:.4f})",
+         color="blue")
+
+plt.xlabel("X")
+plt.ylabel("Y")
+plt.title("Eredeti adatsor és legjobb illesztés")
+plt.legend()
+plt.grid(True)
+plt.tight_layout()
+plt.show()
 ```
 
